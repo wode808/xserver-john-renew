@@ -1,4 +1,4 @@
-name: XServer-Hotmail-VPS
+name: XServer-Vmail-VPS
 on:
   workflow_dispatch:
   schedule:
