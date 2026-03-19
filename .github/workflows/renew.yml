@@ -3,7 +3,7 @@ name: XServer-Vmail-VPS
 on:
   workflow_dispatch:
   schedule:
-    - cron: '46 0 * * *'  # 每天触发（北京时间 08:46）
+    - cron: '46 0 * * *'  # 每天触发（08:46 北京时间）
 
 jobs:
   run_xserver_renew:
@@ -28,13 +28,13 @@ jobs:
         with:
           python-version: '3.10'
 
-      # ✅ 新增：控制每48小时执行（从明天开始）
+      # ✅ 固定起点：2026-03-20
       - name: ⏱️ 控制执行频率（每48小时）
         run: |
           echo "计算是否需要执行..."
 
-          # 起始时间：明天 00:46 UTC
-          START_TIME=$(date -u -d "tomorrow 00:46" +%s)
+          # 起始时间（UTC）
+          START_TIME=$(date -u -d "2026-03-20 00:46" +%s)
           NOW=$(date +%s)
 
           DIFF=$((NOW - START_TIME))
@@ -45,11 +45,11 @@ jobs:
 
           # 还没到起始时间 → 跳过
           if [ $DIFF -lt 0 ]; then
-            echo "⏭️ 还没到开始时间，跳过执行"
+            echo "⏭️ 还没到 2026-03-20，跳过执行"
             exit 0
           fi
 
-          # 是否满足48小时周期
+          # 每48小时判断
           if (( DIFF / 86400 % 2 != 0 )); then
             echo "⏭️ 未到48小时周期，跳过执行"
             exit 0
