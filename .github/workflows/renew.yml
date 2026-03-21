@@ -28,60 +28,65 @@ jobs:
         with:
           python-version: '3.10'
 
-      # ✅ 核心修复：用 outputs 控制后续步骤
-      - name: ⏱️ 控制执行频率（严格48小时）
+      # ✅ 核心：绝对稳定的隔天执行（不受时间偏移影响）
+      - name: ⏱️ 执行频率控制（稳定版）
         id: check_time
         run: |
-          echo "计算是否需要执行..."
+          echo "==== 时间判断开始 ===="
 
+          # 固定起点（UTC）
           START_TIME=$(date -u -d "2026-03-20 00:46" +%s)
           NOW=$(date +%s)
 
           DIFF=$((NOW - START_TIME))
 
+          echo "当前 UTC 时间: $(date -u)"
           echo "当前时间戳: $NOW"
           echo "起始时间戳: $START_TIME"
           echo "差值: $DIFF 秒"
 
-          # 还没到起始时间
+          # 未到起始时间
           if [ $DIFF -lt 0 ]; then
             echo "⏭️ 未到起始时间"
             echo "run=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          PERIOD=172800      # 48小时
-          TOLERANCE=600      # 10分钟容差
+          # 转换为天数（关键！稳定核心）
+          DAYS=$((DIFF / 86400))
 
-          REMAINDER=$((DIFF % PERIOD))
+          echo "已过去天数: $DAYS"
 
-          echo "周期余数: $REMAINDER"
-
-          if (( REMAINDER > TOLERANCE && REMAINDER < PERIOD - TOLERANCE )); then
-            echo "⏭️ 未到执行窗口，跳过"
+          # 隔天执行
+          if (( DAYS % 2 != 0 )); then
+            echo "⏭️ 今天不是执行日（隔天规则）"
             echo "run=false" >> $GITHUB_OUTPUT
             exit 0
           fi
 
-          echo "✅ 满足48小时执行条件"
+          echo "✅ 今天是执行日"
           echo "run=true" >> $GITHUB_OUTPUT
 
       # =========================
-      # 下面所有步骤都加 if 控制
+      # 以下步骤仅在 run=true 时执行
       # =========================
 
       - name: 🛡️ 启动 Gost 代理转发
         if: steps.check_time.outputs.run == 'true'
         run: |
+          echo "启动 Gost..."
+
           wget https://github.com/ginuerzh/gost/releases/download/v2.11.5/gost-linux-amd64-2.11.5.gz
           gunzip gost-linux-amd64-2.11.5.gz
           chmod +x gost-linux-amd64-2.11.5
           mv gost-linux-amd64-2.11.5 gost
-          echo "启动 Gost 转发隧道..."
+
           nohup ./gost -L http://:8080 -F ${{ secrets.GOST_PROXY }} > gost.log 2>&1 &
           sleep 3
-          echo "测试代理..."
+
+          echo "测试代理 IP..."
           curl -x http://127.0.0.1:8080 https://api.ipify.org
+          echo ""
 
       - name: 🛠️ 安装系统依赖
         if: steps.check_time.outputs.run == 'true'
@@ -97,10 +102,11 @@ jobs:
       - name: 🐍 安装 Python 依赖
         if: steps.check_time.outputs.run == 'true'
         run: |
+          pip install --upgrade pip
           pip install seleniumbase
           seleniumbase install chromedriver
 
-      - name: 🚀 运行脚本
+      - name: 🚀 运行续费脚本
         if: steps.check_time.outputs.run == 'true'
         env:
           PYTHONIOENCODING: utf-8
@@ -108,9 +114,10 @@ jobs:
           GOST_PROXY: ${{ secrets.GOST_PROXY }}
           TG_BOT: ${{ secrets.TG_BOT }}
         run: |
+          echo "开始执行 renew.py..."
           xvfb-run --auto-servernum --server-args="-screen 0 1920x1080x24" python renew.py
 
-      - name: 📸 上传截图
+      - name: 📸 上传截图（仅执行时）
         if: always() && steps.check_time.outputs.run == 'true'
         uses: actions/upload-artifact@v4
         with:
